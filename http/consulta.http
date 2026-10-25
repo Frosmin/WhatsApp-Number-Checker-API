@@ -1,0 +1,7 @@
+@baseUrl = http://127.0.0.1:8080
+
+# @numero = 59177942422
+@numero = 59162653836
+GET {{baseUrl}}/check?number={{numero}}
+Accept: application/json
+
