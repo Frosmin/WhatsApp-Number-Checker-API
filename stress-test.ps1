@@ -1,6 +1,6 @@
 ﻿param (
-    [int]$MaxRequests = 5000,
-    [int]$DelayMs = 500,
+    [int]$MaxRequests = 1000000,
+    [int]$DelayMs = 0,
     [string]$CountryPrefix = "5917",
     [string]$ApiUrl = "http://127.0.0.1:8080/check"
 )
