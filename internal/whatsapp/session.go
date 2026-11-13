@@ -21,10 +21,30 @@ import (
 )
 
 type Client struct {
-	client    *whatsmeow.Client
-	container *sqlstore.Container
-	logger    *slog.Logger
-	connected atomic.Bool
+	client         *whatsmeow.Client
+	container      *sqlstore.Container
+	logger         *slog.Logger
+	connected      atomic.Bool
+	onStatusChange func(status string)
+}
+
+func (c *Client) SetOnStatusChange(fn func(status string)) {
+	c.onStatusChange = fn
+}
+
+func (c *Client) Phone() string {
+	if c.client != nil && c.client.Store != nil && c.client.Store.ID != nil {
+		return c.client.Store.ID.User
+	}
+	return ""
+}
+
+func (c *Client) IsLoggedIn() bool {
+	return c.client != nil && c.client.Store != nil && c.client.Store.ID != nil
+}
+
+func (c *Client) GetQRChannel(ctx context.Context) (<-chan whatsmeow.QRChannelItem, error) {
+	return c.client.GetQRChannel(ctx)
 }
 
 func Open(ctx context.Context, path string, logger *slog.Logger) (*Client, error) {
@@ -67,6 +87,13 @@ func Open(ctx context.Context, path string, logger *slog.Logger) (*Client, error
 	return c, nil
 }
 
+func (c *Client) Connect(ctx context.Context) error {
+	if c.client.IsConnected() {
+		return nil
+	}
+	return c.client.ConnectContext(ctx)
+}
+
 func (c *Client) Ready() bool {
 	return c.connected.Load() && c.client.IsConnected() && c.client.IsLoggedIn()
 }
@@ -105,18 +132,33 @@ func (c *Client) handleEvent(event any) {
 	case *events.Connected:
 		c.connected.Store(true)
 		c.logger.Info("WhatsApp conectado; API lista para consultar")
+		if c.onStatusChange != nil {
+			c.onStatusChange("connected")
+		}
 	case *events.Disconnected, *events.KeepAliveTimeout:
 		c.connected.Store(false)
 		c.logger.Warn("Conexión con WhatsApp interrumpida; consultas temporalmente no disponibles")
+		if c.onStatusChange != nil {
+			c.onStatusChange("disconnected")
+		}
 	case *events.KeepAliveRestored:
 		c.connected.Store(true)
 		c.logger.Info("Conexión con WhatsApp recuperada")
+		if c.onStatusChange != nil {
+			c.onStatusChange("connected")
+		}
 	case *events.LoggedOut:
 		c.connected.Store(false)
 		c.logger.Error("Sesión revocada; reinicia la API y vuelve a vincular mediante QR")
+		if c.onStatusChange != nil {
+			c.onStatusChange("logged_out")
+		}
 	case events.PermanentDisconnect:
 		c.connected.Store(false)
 		c.logger.Error("WhatsApp cerró la conexión; revisa el dispositivo vinculado y reinicia la API", "event", fmt.Sprintf("%T", event))
+		if c.onStatusChange != nil {
+			c.onStatusChange("disconnected")
+		}
 	}
 }
 

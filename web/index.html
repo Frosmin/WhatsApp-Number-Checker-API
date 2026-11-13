@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Checker - Pool Dashboard</title>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --card-bg: #1e293b;
+      --card-border: #334155;
+      --primary: #10b981;
+      --primary-hover: #059669;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --info: #38bdf8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); min-height: 100vh; padding: 1.5rem; }
+    .container { max-width: 1280px; margin: 0 auto; }
+    
+    /* Header */
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid var(--card-border); padding-bottom: 1.25rem; }
+    .logo-group { display: flex; align-items: center; gap: 0.75rem; }
+    .logo-icon { width: 40px; height: 40px; background: #064e3b; border-radius: 10px; display: flex; align-items: center; justify-content: center; fill: var(--primary); }
+    h1 { font-size: 1.5rem; font-weight: 700; color: #fff; }
+    .subtitle { font-size: 0.875rem; color: var(--text-muted); }
+    .header-actions { display: flex; gap: 0.75rem; align-items: center; }
+
+    /* Buttons */
+    .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.1rem; border-radius: 8px; font-weight: 600; font-size: 0.875rem; cursor: pointer; border: none; transition: all 0.2s; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-danger { background: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3); }
+    .btn-danger:hover { background: var(--danger); color: #fff; }
+    .btn-secondary { background: #334155; color: #fff; }
+    .btn-secondary:hover { background: #475569; }
+
+    /* KPI Grid */
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.25rem; margin-bottom: 2rem; }
+    .kpi-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.25rem; }
+    .kpi-title { font-size: 0.813rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.5rem; }
+    .kpi-val { font-size: 1.875rem; font-weight: 700; display: flex; align-items: baseline; gap: 0.5rem; }
+    .kpi-sub { font-size: 0.875rem; color: var(--text-muted); margin-top: 0.4rem; }
+    
+    /* Progress Bar */
+    .progress-bar-bg { width: 100%; height: 8px; background: #334155; border-radius: 999px; overflow: hidden; margin-top: 0.75rem; }
+    .progress-bar-fill { height: 100%; background: var(--primary); transition: width 0.4s ease; border-radius: 999px; }
+    .progress-warning { background: var(--warning); }
+    .progress-danger { background: var(--danger); }
+
+    /* Quick Test Bar */
+    .test-box { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.25rem; margin-bottom: 2rem; display: flex; flex-direction: column; gap: 1rem; }
+    .test-form { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+    .input-text { flex: 1; min-width: 250px; background: #0f172a; border: 1px solid var(--card-border); border-radius: 8px; padding: 0.65rem 1rem; color: #fff; font-size: 0.95rem; }
+    .input-text:focus { outline: 2px solid var(--primary); }
+    .test-result { display: none; padding: 0.85rem 1.25rem; border-radius: 8px; font-size: 0.9rem; align-items: center; justify-content: space-between; }
+    .test-result.active { display: flex; }
+    .result-true { background: rgba(16, 185, 129, 0.15); border: 1px solid var(--primary); color: #34d399; }
+    .result-false { background: rgba(239, 68, 68, 0.15); border: 1px solid var(--danger); color: #f87171; }
+    .result-error { background: rgba(245, 158, 11, 0.15); border: 1px solid var(--warning); color: #fbbf24; }
+
+    /* Workers Section */
+    .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
+    .section-title { font-size: 1.25rem; font-weight: 700; }
+    .worker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.25rem; }
+    .worker-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; gap: 0.85rem; }
+    .worker-header { display: flex; justify-content: space-between; align-items: flex-start; }
+    .worker-name { font-size: 1.1rem; font-weight: 700; color: #fff; }
+    .worker-phone { font-size: 0.85rem; color: var(--text-muted); font-family: monospace; }
+    
+    /* Badges */
+    .badge { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; font-weight: 700; padding: 0.25rem 0.6rem; border-radius: 999px; text-transform: uppercase; }
+    .badge-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .badge-online { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .badge-online .badge-dot { background: #34d399; }
+    .badge-busy { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
+    .badge-busy .badge-dot { background: #38bdf8; }
+    .badge-cooldown { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+    .badge-cooldown .badge-dot { background: #fbbf24; }
+    .badge-quota { background: rgba(249, 115, 22, 0.2); color: #fb923c; }
+    .badge-quota .badge-dot { background: #fb923c; }
+    .badge-disconnected { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+    .badge-disconnected .badge-dot { background: #f87171; }
+
+    /* Worker Stats */
+    .worker-stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; background: #0f172a; padding: 0.75rem; border-radius: 8px; font-size: 0.8rem; text-align: center; }
+    .stat-label { color: var(--text-muted); font-size: 0.7rem; }
+    .stat-num { font-size: 1rem; font-weight: 700; margin-top: 0.15rem; }
+
+    /* Modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75); display: none; align-items: center; justify-content: center; z-index: 50; padding: 1rem; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 16px; width: 100%; max-width: 440px; padding: 1.75rem; display: flex; flex-direction: column; gap: 1.25rem; }
+    .modal-title { font-size: 1.25rem; font-weight: 700; }
+    .qr-container { display: flex; flex-direction: column; align-items: center; justify-content: center; background: #fff; border-radius: 12px; padding: 1.25rem; min-height: 280px; position: relative; }
+    .qr-img { width: 250px; height: 250px; object-fit: contain; }
+    .qr-status { font-size: 0.85rem; color: var(--text-muted); text-align: center; }
+
+    /* Animations */
+    .pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo-group">
+        <div class="logo-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+          </svg>
+        </div>
+        <div>
+          <h1>WhatsApp Number Checker</h1>
+          <div class="subtitle">Pool Multi-Cuentas con Balanceo Inteligente</div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-primary" onclick="openPairModal()">
+          <span>➕ Vincular Nuevo Chip</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Global KPIs -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-title">Meta de Consultas Diarias</div>
+        <div class="kpi-val">
+          <span id="kpi-daily-total">0</span>
+          <span style="font-size: 1rem; color: var(--text-muted); font-weight: 400;" id="kpi-target-total">/ 10,000</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="kpi-daily-progress" style="width: 0%"></div>
+        </div>
+        <div class="kpi-sub" id="kpi-daily-pct">0% completado hoy</div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-title">Estado del Pool</div>
+        <div class="kpi-val">
+          <span id="kpi-active-workers">0</span>
+          <span style="font-size: 1rem; color: var(--text-muted); font-weight: 400;" id="kpi-total-workers">/ 0 Chips</span>
+        </div>
+        <div class="kpi-sub" id="kpi-quota-note">Límite: 1,000 consultas/chip al día</div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-title">Números con WhatsApp (True)</div>
+        <div class="kpi-val" style="color: #34d399;" id="kpi-success">0</div>
+        <div class="kpi-sub" id="kpi-success-pct">0% tasa de positivos</div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-title">Sin WhatsApp (False) / Errores</div>
+        <div class="kpi-val" style="color: #f87171;" id="kpi-negative">0</div>
+        <div class="kpi-sub" id="kpi-errors">0 errores reportados</div>
+      </div>
+    </div>
+
+    <!-- Quick Check Tool -->
+    <div class="test-box">
+      <div style="font-weight: 600; font-size: 0.95rem;">Prueba Rápida de Consulta</div>
+      <form class="test-form" onsubmit="runQuickCheck(event)">
+        <input type="text" class="input-text" id="quick-number" placeholder="Ej: 59170000000 (código país + número, sin +)" required />
+        <button type="submit" class="btn btn-secondary" id="btn-quick-check">Verificar Número</button>
+      </form>
+      <div class="test-result" id="quick-result">
+        <div id="quick-result-text"></div>
+        <div id="quick-result-meta" style="font-size: 0.8rem; opacity: 0.85;"></div>
+      </div>
+    </div>
+
+    <!-- Workers Section -->
+    <div class="section-header">
+      <div class="section-title">Chips Conectados en el Pool</div>
+      <div style="font-size: 0.875rem; color: var(--text-muted);" id="worker-count-badge">0 cuentas cargadas</div>
+    </div>
+
+    <div class="worker-grid" id="workers-container">
+      <!-- Cards rendered via JS -->
+    </div>
+  </div>
+
+  <!-- Modal Pairing -->
+  <div class="modal-overlay" id="pair-modal">
+    <div class="modal">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="modal-title">Vincular Nuevo Chip</div>
+        <button onclick="closePairModal()" style="background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;">&times;</button>
+      </div>
+
+      <div id="modal-step-alias">
+        <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 1rem;">
+          Ingresa un identificador para este número (ej. <code>chip_01</code>, <code>linea_ventas</code>):
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+          <input type="text" class="input-text" id="pair-id" placeholder="Nombre/ID (sin espacios)" required />
+          <button class="btn btn-primary" onclick="startPairing()" style="justify-content: center;">
+            Continuar y Generar QR
+          </button>
+        </div>
+      </div>
+
+      <div id="modal-step-qr" style="display: none; flex-direction: column; gap: 1rem;">
+        <div class="qr-container">
+          <img id="qr-image" class="qr-img" src="" alt="Código QR WhatsApp" style="display: none;" />
+          <div id="qr-loading" style="color: #0f172a; text-align: center;">
+            <div class="pulse" style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem;">Cargando QR...</div>
+            <div style="font-size: 0.85rem; color: #475569;">Conectando con servidores de WhatsApp</div>
+          </div>
+        </div>
+        <div class="qr-status" id="qr-status-text">
+          Abre <b>WhatsApp &gt; Dispositivos vinculados &gt; Vincular un dispositivo</b> y escanea el código.
+        </div>
+        <button class="btn btn-secondary" onclick="closePairModal()" style="justify-content: center;">
+          Cancelar
+        </button>
+      </div>
+
+      <div id="modal-step-success" style="display: none; flex-direction: column; gap: 1rem; text-align: center; padding: 1rem 0;">
+        <div style="font-size: 3rem;">🎉</div>
+        <div style="font-size: 1.25rem; font-weight: 700; color: #34d399;">¡Chip Vinculado con Éxito!</div>
+        <div style="font-size: 0.9rem; color: var(--text-muted);" id="modal-success-phone"></div>
+        <button class="btn btn-primary" onclick="closePairModal()" style="justify-content: center; margin-top: 1rem;">
+          Entendido
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let eventSource = null;
+
+    async function fetchStats() {
+      try {
+        const res = await fetch('/api/stats');
+        if (!res.ok) return;
+        const data = await res.json();
+        renderDashboard(data);
+      } catch (e) {
+        console.error("Error fetching stats:", e);
+      }
+    }
+
+    function renderDashboard(data) {
+      // Global KPIs
+      document.getElementById('kpi-daily-total').textContent = data.total_daily_checks.toLocaleString();
+      document.getElementById('kpi-target-total').textContent = '/ ' + data.target_daily_total.toLocaleString();
+      
+      const pct = data.target_daily_total > 0 ? Math.min(100, Math.round((data.total_daily_checks / data.target_daily_total) * 100)) : 0;
+      const progEl = document.getElementById('kpi-daily-progress');
+      progEl.style.width = pct + '%';
+      document.getElementById('kpi-daily-pct').textContent = pct + '% de la meta diaria';
+
+      document.getElementById('kpi-active-workers').textContent = data.active_workers;
+      document.getElementById('kpi-total-workers').textContent = '/ ' + data.total_workers + ' Chips';
+      document.getElementById('kpi-quota-note').textContent = data.max_daily_per_number > 0 
+        ? `Límite: ${data.max_daily_per_number.toLocaleString()} consultas/chip al día`
+        : 'Sin límite por chip (ilimitado)';
+
+      document.getElementById('kpi-success').textContent = data.success_count.toLocaleString();
+      const totalChecks = data.success_count + data.negative_count;
+      const successPct = totalChecks > 0 ? Math.round((data.success_count / totalChecks) * 100) : 0;
+      document.getElementById('kpi-success-pct').textContent = `${successPct}% con WhatsApp activo`;
+
+      document.getElementById('kpi-negative').textContent = data.negative_count.toLocaleString();
+      document.getElementById('kpi-errors').textContent = `${data.error_count.toLocaleString()} errores | ${data.rate_limit_count} rate-limits`;
+
+      document.getElementById('worker-count-badge').textContent = `${data.total_workers} cuentas configuradas`;
+
+      // Render Workers
+      const container = document.getElementById('workers-container');
+      container.innerHTML = '';
+
+      if (!data.workers || data.workers.length === 0) {
+        container.innerHTML = `
+          <div style="grid-column: 1/-1; text-align: center; padding: 3rem; background: var(--card-bg); border-radius: 12px; border: 1px dashed var(--card-border);">
+            <div style="font-size: 2rem; margin-bottom: 0.5rem;">📱</div>
+            <div style="font-weight: 600; font-size: 1.1rem; margin-bottom: 0.5rem;">No hay chips vinculados aún</div>
+            <div style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1.25rem;">Vincula tu primer número escaneando el código QR para comenzar a consultar.</div>
+            <button class="btn btn-primary" onclick="openPairModal()">Vincular Primer Chip</button>
+          </div>
+        `;
+        return;
+      }
+
+      data.workers.forEach(w => {
+        const card = document.createElement('div');
+        card.className = 'worker-card';
+
+        let badgeClass = 'badge-online';
+        let badgeText = 'EN LÍNEA';
+        if (w.status === 'busy') { badgeClass = 'badge-busy'; badgeText = 'CONSULTANDO'; }
+        else if (w.status === 'cooldown') { badgeClass = 'badge-cooldown'; badgeText = `REPOSO (${w.cooldown_sec}s)`; }
+        else if (w.status === 'quota_exceeded') { badgeClass = 'badge-quota'; badgeText = 'CUOTA ALCANZADA'; }
+        else if (w.status === 'disconnected') { badgeClass = 'badge-disconnected'; badgeText = 'DESCONECTADO'; }
+        else if (w.status === 'logged_out') { badgeClass = 'badge-disconnected'; badgeText = 'SESIÓN CERRADA'; }
+
+        const maxDaily = w.max_daily || 1000;
+        const dailyPct = maxDaily > 0 ? Math.min(100, Math.round((w.daily_checks / maxDaily) * 100)) : 0;
+        let barClass = '';
+        if (dailyPct >= 90) barClass = 'progress-danger';
+        else if (dailyPct >= 75) barClass = 'progress-warning';
+
+        const lastUsedText = w.last_used && w.last_used !== '0001-01-01T00:00:00Z'
+          ? timeAgo(new Date(w.last_used))
+          : 'Sin actividad';
+
+        card.innerHTML = `
+          <div class="worker-header">
+            <div>
+              <div class="worker-name">${escapeHtml(w.alias || w.id)}</div>
+              <div class="worker-phone">${w.phone ? '+' + escapeHtml(w.phone) : 'Esperando vinculación'}</div>
+            </div>
+            <span class="badge ${badgeClass}">
+              <span class="badge-dot"></span>
+              ${badgeText}
+            </span>
+          </div>
+
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.35rem;">
+              <span style="color: var(--text-muted);">Consultas hoy:</span>
+              <span style="font-weight: 600;">${w.daily_checks} / ${maxDaily.toLocaleString()}</span>
+            </div>
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill ${barClass}" style="width: ${dailyPct}%"></div>
+            </div>
+          </div>
+
+          <div class="worker-stats-row">
+            <div>
+              <div class="stat-label">POSITIVOS</div>
+              <div class="stat-num" style="color: #34d399;">${w.success_count}</div>
+            </div>
+            <div>
+              <div class="stat-label">NEGATIVOS</div>
+              <div class="stat-num" style="color: #f87171;">${w.negative_count}</div>
+            </div>
+            <div>
+              <div class="stat-label">TOTAL HIST.</div>
+              <div class="stat-num">${w.total_checks}</div>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; margin-top: auto; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.05);">
+            <span style="color: var(--text-muted);">Último uso: ${lastUsedText}</span>
+            <div style="display: flex; gap: 0.4rem;">
+              ${(w.status === 'disconnected' || w.status === 'logged_out') ? `
+                <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;" onclick="reconnectWorker('${escapeHtml(w.id)}')">
+                  Reconectar
+                </button>
+              ` : ''}
+              <button class="btn btn-danger" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;" onclick="removeWorker('${escapeHtml(w.id)}')">
+                Eliminar
+              </button>
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function timeAgo(date) {
+      const sec = Math.floor((new Date() - date) / 1000);
+      if (sec < 5) return 'hace un momento';
+      if (sec < 60) return `hace ${sec}s`;
+      const min = Math.floor(sec / 60);
+      if (min < 60) return `hace ${min}m`;
+      const hr = Math.floor(min / 60);
+      return `hace ${hr}h`;
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    // Quick Test
+    async function runQuickCheck(e) {
+      e.preventDefault();
+      const numInput = document.getElementById('quick-number');
+      const number = numInput.value.trim().replace(/\+/g, '');
+      const btn = document.getElementById('btn-quick-check');
+      const resBox = document.getElementById('quick-result');
+      const resText = document.getElementById('quick-result-text');
+      const resMeta = document.getElementById('quick-result-meta');
+
+      btn.disabled = true;
+      btn.textContent = 'Consultando...';
+      resBox.className = 'test-result';
+
+      const t0 = performance.now();
+      try {
+        const resp = await fetch(`/check?number=${encodeURIComponent(number)}`);
+        const elapsed = Math.round(performance.now() - t0);
+        const data = await resp.json();
+
+        resBox.classList.add('active');
+        if (resp.status === 200) {
+          if (data.active === true) {
+            resBox.className = 'test-result active result-true';
+            resText.innerHTML = `<b>${data.number}</b> TIENE WhatsApp activo`;
+          } else {
+            resBox.className = 'test-result active result-false';
+            resText.innerHTML = `<b>${data.number}</b> NO está registrado en WhatsApp`;
+          }
+          resMeta.textContent = `Atendido por: ${data.worker || 'pool'} en ${elapsed}ms`;
+        } else {
+          resBox.className = 'test-result active result-error';
+          resText.textContent = `Error (${resp.status}): ${data.error || 'Fallo de consulta'}`;
+          resMeta.textContent = `${elapsed}ms`;
+        }
+      } catch (err) {
+        resBox.className = 'test-result active result-error';
+        resText.textContent = `Error de conexión: ${err.message}`;
+        resMeta.textContent = '';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Verificar Número';
+        fetchStats();
+      }
+    }
+
+    // Modal & Pairing
+    function openPairModal() {
+      document.getElementById('pair-modal').classList.add('open');
+      document.getElementById('modal-step-alias').style.display = 'block';
+      document.getElementById('modal-step-qr').style.display = 'none';
+      document.getElementById('modal-step-success').style.display = 'none';
+      document.getElementById('pair-id').value = '';
+    }
+
+    function closePairModal() {
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+      document.getElementById('pair-modal').classList.remove('open');
+      fetchStats();
+    }
+
+    function startPairing() {
+      const idInput = document.getElementById('pair-id');
+      const id = idInput.value.trim().replace(/[^a-zA-Z0-9_-]/g, '');
+      if (!id) {
+        alert("Por favor ingresa un nombre o identificador válido");
+        return;
+      }
+
+      document.getElementById('modal-step-alias').style.display = 'none';
+      document.getElementById('modal-step-qr').style.display = 'flex';
+      document.getElementById('qr-loading').style.display = 'block';
+      document.getElementById('qr-image').style.display = 'none';
+
+      if (eventSource) eventSource.close();
+
+      eventSource = new EventSource(`/api/sessions/pair/stream?id=${encodeURIComponent(id)}`);
+
+      eventSource.addEventListener('qr', function(e) {
+        const data = JSON.parse(e.data);
+        const qrImg = document.getElementById('qr-image');
+        qrImg.src = data.image;
+        qrImg.style.display = 'block';
+        document.getElementById('qr-loading').style.display = 'none';
+        document.getElementById('qr-status-text').textContent = 'Código QR listo. Escanéalo en WhatsApp.';
+      });
+
+      eventSource.addEventListener('status', function(e) {
+        const data = JSON.parse(e.data);
+        document.getElementById('qr-status-text').textContent = data.message || 'Esperando...';
+      });
+
+      eventSource.addEventListener('connected', function(e) {
+        const data = JSON.parse(e.data);
+        eventSource.close();
+        eventSource = null;
+
+        document.getElementById('modal-step-qr').style.display = 'none';
+        document.getElementById('modal-step-success').style.display = 'flex';
+        document.getElementById('modal-success-phone').textContent = 'Número: +' + (data.phone || id);
+        fetchStats();
+      });
+
+      eventSource.onerror = function(err) {
+        console.error("SSE error:", err);
+      };
+    }
+
+    async function reconnectWorker(id) {
+      try {
+        const resp = await fetch(`/api/sessions/reconnect?id=${encodeURIComponent(id)}`, { method: 'POST' });
+        if (resp.ok) {
+          fetchStats();
+        } else {
+          alert("No se pudo iniciar reconexión");
+        }
+      } catch (e) {
+        alert("Error de conexión: " + e.message);
+      }
+    }
+
+    async function removeWorker(id) {
+      if (!confirm(`¿Estás seguro de que deseas eliminar y desvincular ${id}?`)) return;
+      try {
+        const resp = await fetch(`/api/sessions?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+        if (resp.ok) {
+          fetchStats();
+        } else {
+          alert("No se pudo eliminar la sesión");
+        }
+      } catch (e) {
+        alert("Error de conexión al eliminar: " + e.message);
+      }
+    }
+
+    // Auto refresh stats every 3 seconds
+    setInterval(fetchStats, 3000);
+    fetchStats();
+  </script>
+</body>
+</html>
