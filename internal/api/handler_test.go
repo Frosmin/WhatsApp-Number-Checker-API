@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http/httptest"
 	"strings"
@@ -30,11 +31,11 @@ func request(h *Handler, target string) *httptest.ResponseRecorder {
 
 func TestBooleanAndNormalization(t *testing.T) {
 	for _, tc := range []struct {
-		query, phone, body string
-		registered         bool
+		query, phone string
+		registered   bool
 	}{
-		{"59170000000", "+59170000000", "true\n", true},
-		{"%2B59170000000", "+59170000000", "false\n", false},
+		{"59170000000", "+59170000000", true},
+		{"%2B59170000000", "+59170000000", false},
 	} {
 		t.Run(tc.query, func(t *testing.T) {
 			h := New(&fakeChecker{true, func(_ context.Context, phone string) (bool, error) {
@@ -44,8 +45,18 @@ func TestBooleanAndNormalization(t *testing.T) {
 				return tc.registered, nil
 			}})
 			w := request(h, "/check?number="+tc.query)
-			if w.Code != 200 || w.Body.String() != tc.body {
-				t.Fatalf("%d %s", w.Code, w.Body)
+			if w.Code != 200 {
+				t.Fatalf("expected 200, got %d %s", w.Code, w.Body)
+			}
+			var resp struct {
+				Number string `json:"number"`
+				Active bool   `json:"active"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("failed to decode json: %v", err)
+			}
+			if resp.Number != tc.phone || resp.Active != tc.registered {
+				t.Fatalf("got %+v, want number=%s, active=%v", resp, tc.phone, tc.registered)
 			}
 			if w.Header().Get("Content-Type") != "application/json" {
 				t.Fatal("expected JSON")
@@ -135,7 +146,12 @@ func TestRateLimitAndNoResultCache(t *testing.T) {
 	}
 	now = now.Add(time.Second)
 	w = request(h, "/check?number=59170000000")
-	if w.Code != 200 || w.Body.String() != "false\n" {
+	var resp struct {
+		Number string `json:"number"`
+		Active bool   `json:"active"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if w.Code != 200 || resp.Active != false {
 		t.Fatalf("cached or blocked: %d %s", w.Code, w.Body)
 	}
 }
@@ -204,5 +220,30 @@ func TestRouteAndMethod(t *testing.T) {
 		if w.Code != tc.code || !strings.Contains(w.Body.String(), "error") {
 			t.Fatalf("%d %s", w.Code, w.Body)
 		}
+	}
+}
+
+func TestDashboardAndStatsRoutes(t *testing.T) {
+	h := New(&fakeChecker{ready: true})
+
+	// Test GET /
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", "/", nil))
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "WhatsApp Number Checker") {
+		t.Fatalf("expected dashboard HTML, got %d %s", w.Code, w.Body.String())
+	}
+
+	// Test GET /admin
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", "/admin", nil))
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "WhatsApp Number Checker") {
+		t.Fatalf("expected dashboard HTML on /admin, got %d", w.Code)
+	}
+
+	// Test GET /api/stats
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", "/api/stats", nil))
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "total_daily_checks") {
+		t.Fatalf("expected stats JSON, got %d %s", w.Code, w.Body.String())
 	}
 }

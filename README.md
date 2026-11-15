@@ -1,152 +1,112 @@
-# WhatsApp Number Checker API
+# WhatsApp Number Checker API (Multi-Account Pool & Dashboard)
 
-API local en Go para comprobar si un número está registrado en WhatsApp.
-Una consulta correcta devuelve **solo `true` o `false`** en JSON. Una consulta
-que falla devuelve un error HTTP, nunca un `false` inventado.
+API en Go de alto rendimiento para comprobar si números telefónicos están registrados en WhatsApp mediante un **Pool de múltiples cuentas** y un **Panel Web de control y monitoreo en tiempo real**.
+
+- **Distribución inteligente de carga:** Algoritmo *Longest Idle* (selecciona la cuenta que más tiempo ha descansado para evitar patrones robóticos).
+- **Control estricto de cuotas por variables de entorno:** Ajusta el límite diario de consultas por chip (ej. 1.000) y la meta total (ej. 10.000).
+- **Aislamiento de Cooldown:** Si WhatsApp responde con un `429` (Rate Limited) en un chip, solo ese chip entra en pausa temporal; los demás siguen respondiendo sin interrumpir el servicio.
+- **Panel Web Embebido (Cero dependencias):** Escanea códigos QR para vincular chips en vivo, monitorea métricas, progreso diario y elimina cuentas desde el navegador sin instalar Node.js ni Docker.
+
+---
 
 ## Ejecutar en Windows
 
-Requiere Go 1.26 o posterior, conexión a internet y una cuenta de WhatsApp
-que puedas vincular como dispositivo. No necesita Node.js, Docker, un servidor
-de bases de datos ni un compilador C.
-
-Desde la carpeta del proyecto, en PowerShell:
+Requiere Go 1.26 o posterior y conexión a internet.
 
 ```powershell
+$env:CGO_ENABLED = "0"
 go run .
 ```
 
-En el teléfono abre **WhatsApp → Dispositivos vinculados → Vincular un
-dispositivo** y escanea el QR que aparece en la terminal. Espera el mensaje
-`WhatsApp conectado; API lista para consultar`. Si el QR caduca, detén la API
-con Ctrl+C y vuelve a ejecutarla.
+Una vez iniciada, abre tu navegador en:
+* **Panel de Control y Monitoreo:** `http://127.0.0.1:8080/` (o `/admin`)
+* **Endpoint de Consultas:** `http://127.0.0.1:8080/check?number=NUMERO`
 
-La sesión queda en `data/session.db`; al volver a ejecutar la API se recupera
-sin pedir otro QR, siempre que WhatsApp no haya revocado la vinculación.
-Ejecuta desde la misma carpeta para usar la misma ruta de sesión. También puedes
-fijar otra ubicación:
+---
 
-```powershell
-go run . -session "D:\mis-datos\whatsapp-session.db"
-```
+## Variables de Entorno y Configuración
 
-La API escucha exclusivamente en `http://127.0.0.1:8080`. Antes de conectar
-WhatsApp, las consultas válidas reciben `503`. Mantén abierta la terminal.
+Puedes configurar todos los parámetros mediante variables de entorno o flags al iniciar:
 
-## Consultar
+| Variable de Entorno | Flag CLI | Valor por Defecto | Descripción |
+| :--- | :--- | :---: | :--- |
+| `MAX_DAILY_QUERIES_PER_NUMBER` | `-max-daily` | `1000` | Límite máximo de consultas que un chip puede hacer por día antes de pausarse hasta la medianoche (0 = ilimitado). |
+| `TARGET_DAILY_TOTAL` | `-target-daily` | `10000` | Meta de consultas globales para el medidor visual del dashboard. |
+| `SESSIONS_DIR` | `-sessions-dir` | `data/sessions` | Carpeta donde se guardan las sesiones SQLite independientes (`.db`). |
+| `HTTP_ADDR` o `PORT` | `-addr` | `127.0.0.1:8080` | Dirección y puerto en el que escucha el servidor. |
+| `REQUEST_DELAY_MS` | `-delay-ms` | `1000` | Milisegundos de espera/descanso forzado por chip entre consultas. |
 
-En otra terminal, sustituye `NUMERO_INTERNACIONAL` por el número real, con
-código de país y sin espacios, guiones ni ceros iniciales:
+### Ejemplo con variables personalizadas en PowerShell:
 
 ```powershell
-curl.exe -i "http://127.0.0.1:8080/check?number=NUMERO_INTERNACIONAL"
+$env:MAX_DAILY_QUERIES_PER_NUMBER = "800"
+$env:TARGET_DAILY_TOTAL = "10000"
+$env:HTTP_ADDR = "0.0.0.0:8080"
+go run .
 ```
 
-Ejemplo de formato boliviano: `591` seguido del número nacional. El prefijo
-es obligatorio: la API no adivina el país ni añade `591` automáticamente.
-Se permiten hasta 15 dígitos. Para incluir `+`, codifícalo como `%2B`;
-un `+` literal en la query se interpreta como espacio y se rechaza.
+---
 
-Una respuesta HTTP `200` tiene como cuerpo:
+## Cómo Vincular Múltiples Números
+
+1. Inicia el servidor y entra en tu navegador a `http://127.0.0.1:8080/`.
+2. Haz clic en el botón verde **"➕ Vincular Nuevo Chip"**.
+3. Escribe un alias (ej. `chip_01`, `linea_ventas`).
+4. Se generará un código QR en pantalla.
+5. Abre WhatsApp en tu celular: **Ajustes → Dispositivos vinculados → Vincular un dispositivo** y escanea el QR.
+6. El panel confirmará la vinculación con el número detectado (ej. `+591XXXXXXXX`) y el chip entrará inmediatamente al Pool de rotación.
+7. Repite el proceso para vincular los 10 chips.
+
+*Nota:* Las sesiones se guardan en `data/sessions/*.db`. Al reiniciar la API, se conectan automáticamente sin pedir QR nuevamente. Si tenías una sesión anterior en `data/session.db`, se migra automáticamente a `data/sessions/default.db`.
+
+---
+
+## Endpoint de Consulta
+
+En tu cliente HTTP, backend o terminal:
+
+```powershell
+curl.exe -i "http://127.0.0.1:8080/check?number=59170000000"
+```
+
+### Respuesta Exitosa (`200 OK`)
 
 ```json
-true
+{
+  "number": "+59170000000",
+  "active": true,
+  "worker": "chip_01"
+}
 ```
 
-O bien:
+* `active`: `true` si el número tiene WhatsApp, `false` si WhatsApp confirmó que no está registrado.
+* `worker`: ID del chip en el pool que atendió la consulta.
 
-```json
-false
-```
+### Códigos de Error
 
-`false` significa que WhatsApp respondió explícitamente que ese número no
-está registrado. No indica si la línea telefónica existe o está activa,
-ni si el usuario está conectado. No se envían mensajes al número consultado.
+Todos los errores devuelven JSON (ej. `{"error":"invalid_number"}`).
 
-## Errores
+| HTTP | Código | Causa / Acción |
+| :---: | :--- | :--- |
+| **400** | `invalid_number` | Número vacío o formato incorrecto (debe incluir prefijo de país). |
+| **404** | `not_found` | Ruta desconocida. |
+| **405** | `method_not_allowed` | Solo se permite GET para consultas. |
+| **429** | `rate_limited` | Todos los chips están ocupados o en pausa; revisa `Retry-After`. |
+| **429** | `all_quotas_exceeded` | Todos los chips alcanzaron su límite diario (`MAX_DAILY_QUERIES_PER_NUMBER`). |
+| **502** | `upstream_error` | Fallo o respuesta ambigua de los servidores de WhatsApp. |
+| **503** | `whatsapp_unavailable` | No hay ningún chip conectado en el pool. |
+| **504** | `timeout` | La consulta tardó más de 10 segundos. |
 
-Todos los cuerpos son JSON. Ejemplo: `{"error":"whatsapp_unavailable"}`.
+---
 
-| HTTP | Código | Significado / acción |
-| --- | --- | --- |
-| 400 | `invalid_number` | Falta el número, está repetido o tiene formato inválido. |
-| 404 | `not_found` | La única ruta es `/check`. |
-| 405 | `method_not_allowed` | Usa GET. |
-| 429 | `rate_limited` | Espera los segundos de `Retry-After` antes de reintentar. |
-| 502 | `upstream_error` | Fallo de WhatsApp o respuesta incompleta/ambigua. |
-| 503 | `whatsapp_unavailable` | Falta vincular, está desconectado o se revocó la sesión. |
-| 504 | `timeout` | La consulta superó los 10 segundos. |
+## Compilación y Pruebas
 
-Los resultados y errores llevan `Cache-Control: no-store`. Trata cualquier
-respuesta distinta de `200` como **resultado desconocido**, no como `false`.
-
-## Listas y frecuencia
-
-Tu programa recorre la lista mediante un GET por número. La API permite una
-consulta activa y un inicio por segundo; el exceso devuelve `429` sin
-encolarse. Una consulta puede tardar varios segundos: esperar un segundo no
-garantiza que ya esté libre la conexión. No hay caché de resultados ni
-reintentos automáticos de consultas.
-
-Ante un límite explícito de WhatsApp (`429` o `419` en la consulta), se
-pausan todas las nuevas consultas durante al menos 60 segundos. Si la
-respuesta incluye una espera mayor, se respeta. Los clientes deben leer
-`Retry-After` y reintentar después, sin bucles inmediatos.
-
-La conexión usa el protocolo de WhatsApp Web mediante whatsmeow y no es una
-API oficial de Meta. Una sesión puede perder acceso o necesitar una nueva
-vinculación. El límite local de una consulta por segundo es control de carga,
-**no una cuota garantizada o aprobada por WhatsApp**. Más de 10.000 consultas
-diarias queda pendiente de validación sostenida con la cuenta real.
-
-## Sesión y problemas de conexión
-
-- Conserva `data/` y protégelo: contiene las credenciales del dispositivo.
-  No publiques esa carpeta ni compartas los QR. Los datos están excluidos de Git.
-- Ante cortes temporales, la biblioteca intenta reconectar. Mientras tanto
-  la API responde `503`. No se reintenta la consulta que ya falló.
-- Si aparece `Sesión revocada`, reinicia y vincula nuevamente. No borres
-  manualmente una sesión activa.
-- Si el puerto está ocupado, detén la otra instancia. No ejecutes dos procesos
-  usando la misma sesión ni compartas su archivo mientras está en uso.
-- Con `upstream_error` persistente, pausa el procesamiento y revisa la conexión
-  y compatibilidad antes de seguir; no clasifiques esos números como negativos.
-
-## Compilar y verificar
+Para compilar un único binario ejecutable optimizado para Windows:
 
 ```powershell
+$env:CGO_ENABLED = "0"
 go test ./...
 go vet ./...
-$env:CGO_ENABLED = "0"
 go build -o bin/whatsapp-checker.exe .
 .\bin\whatsapp-checker.exe
 ```
-
-Las pruebas usan respuestas controladas para comprobar booleanos, formatos,
-resultados ambiguos, desconexión, timeout, concurrencia, cooldown y persistencia
-real de SQLite entre aperturas. No consultan números reales.
-
-El adaptador reproduce la consulta de contacto de `IsOnWhatsApp` y valida la
-respuesta original mediante `DangerousInternals().SendIQ` con `NoRetry: true`.
-Esto también evita que el helper `Usync` reenvíe una consulta al reconectar.
-La versión fijada
-de `IsOnWhatsApp` convierte cualquier tipo distinto de `in` en `false`; aquí
-solo se acepta el negativo explícito `out`. Esta dependencia interna está
-aislada en `internal/whatsapp/lookup.go`: una actualización requiere repetir
-las pruebas y la comprobación real de ambos resultados.
-
-## Validación real pendiente
-
-1. Vincula tu cuenta y consulta un número controlado que tenga WhatsApp y
-   otro confirmado que no lo tenga. No uses números inventados como negativos.
-2. Comprueba respectivamente `200 true` y `200 false`. Cualquier error HTTP
-   deja la comprobación pendiente.
-3. Detén y reinicia: debe recuperar la sesión sin otro QR. Después prueba
-   desconexión temporal y recuperación.
-4. Con una muestra pequeña y controlada, registra duración, consultas `200`,
-   errores y límites. Los logs muestran estado HTTP y duración en milisegundos
-   sin registrar los números consultados. No extrapoles una muestra breve a
-   capacidad diaria garantizada.
-
-La entrega solo queda validada con WhatsApp real después de completar estos
-pasos. Las pruebas automáticas y la compilación no sustituyen esa evidencia.

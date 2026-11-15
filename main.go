@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"log/slog"
 	"net"
@@ -13,38 +12,41 @@ import (
 	"time"
 
 	"whatsapp-number-checker/internal/api"
-	"whatsapp-number-checker/internal/whatsapp"
+	"whatsapp-number-checker/internal/config"
+	"whatsapp-number-checker/internal/pool"
 )
 
-const address = "127.0.0.1:8080"
-
 func main() {
-	sessionPath := flag.String("session", "data/session.db", "archivo SQLite de sesión de WhatsApp")
-	flag.Parse()
+	cfg := config.Load()
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	if err := run(ctx, *sessionPath); err != nil {
+
+	if err := run(ctx, cfg); err != nil {
 		slog.Error("No se pudo ejecutar la API", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, sessionPath string) error {
-	// Bind before connecting: a second process must not use the same session.
-	listener, err := net.Listen("tcp4", address)
+func run(ctx context.Context, cfg *config.Config) error {
+	listener, err := net.Listen("tcp4", cfg.Addr)
 	if err != nil {
-		return fmt.Errorf("escuchar en %s (comprueba que no haya otra instancia): %w", address, err)
+		return fmt.Errorf("escuchar en %s (comprueba que no haya otra instancia): %w", cfg.Addr, err)
 	}
 	defer listener.Close()
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	client, err := whatsapp.Open(ctx, sessionPath, slog.Default())
-	if err != nil {
-		return err
+
+	// Inicializar el Pool multi-cuentas
+	p := pool.New(ctx, cfg, slog.Default())
+	if err := p.LoadSessions(ctx); err != nil {
+		slog.Warn("Advertencia cargando sesiones previas", "error", err)
 	}
-	defer client.Close()
+	defer p.CloseAll()
+
 	server := &http.Server{
-		Handler:           api.New(client),
+		Handler:           api.New(p),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      15 * time.Second,
@@ -52,29 +54,38 @@ func run(ctx context.Context, sessionPath string) error {
 		MaxHeaderBytes:    8 * 1024,
 		BaseContext:       func(net.Listener) context.Context { return ctx },
 	}
+
 	served := make(chan error, 1)
 	go func() { served <- server.Serve(listener) }()
-	started := make(chan struct{})
-	go func() {
-		defer close(started)
-		if err := client.Start(ctx, os.Stdout); err != nil && ctx.Err() == nil {
-			slog.Error("No se pudo conectar con WhatsApp; la API devolverá 503. Revisa internet y reinicia", "error", err)
-		}
-	}()
-	slog.Info("API local disponible; las consultas devolverán 503 hasta conectar WhatsApp", "url", "http://"+address)
+
+	baseURL := "http://" + cfg.Addr
+	if cfg.Addr[0] == ':' {
+		baseURL = "http://127.0.0.1" + cfg.Addr
+	}
+
+	slog.Info("Servidor iniciado con éxito",
+		"dashboard", baseURL,
+		"consultas_api", baseURL+"/check?number=NUMERO",
+		"max_diario_por_chip", cfg.MaxDailyQueriesPerNumber,
+		"meta_diaria_total", cfg.TargetDailyTotal,
+		"carpeta_sesiones", cfg.SessionsDir,
+	)
+
 	var serveErr error
 	select {
 	case <-ctx.Done():
 	case serveErr = <-served:
 	}
+
 	cancel()
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
+
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		_ = server.Close()
 		return fmt.Errorf("cerrar servidor: %w", err)
 	}
-	<-started
+
 	if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
 		return serveErr
 	}
